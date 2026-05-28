@@ -1,0 +1,40 @@
+networks:
+  ifood-network:
+    driver: bridge
+ 
+services:
+ 
+  minio:
+    image: minio/minio:latest
+    container_name: ifood_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - ifood-network
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+ 
+  jupyter:
+    image: quay.io/jupyter/pyspark-notebook:spark-3.5.0
+    container_name: ifood_jupyter
+    ports:
+      - "8888:8888"
+      - "4040:4040"
+    networks:
+      - ifood-network
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    volumes:
+      - ./src:/home/jovyan/work/src
+      - ./analysis:/home/jovyan/work/analysis
+      - ./landing_temp:/home/jovyan/work/landing_temp   # ← arquivos brutos persistidos
+    depends_on:
+      - minio
+ 
+volumes:
+  minio_data:

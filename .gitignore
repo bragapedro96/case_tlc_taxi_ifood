@@ -1,0 +1,9 @@
+# Arquivos temporários e dados brutos
+landing_temp/
+data/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Variáveis de ambiente
+.env
