@@ -4,6 +4,8 @@ networks:
  
 services:
  
+  # ── 1. MinIO ─────────────────────────────────────────────────────────────────
+  # Armazenamento de objetos local — simula o S3 da AWS.
   minio:
     image: minio/minio:latest
     container_name: ifood_minio
@@ -18,7 +20,32 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
  
+  # ── 2. MinIO Init ─────────────────────────────────────────────────────────────
+  # Cria o bucket automaticamente ao subir o ambiente.
+  # Roda uma única vez e encerra — não precisa ficar ativo.
+  minio-init:
+    image: minio/mc:latest
+    container_name: ifood_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 admin admin123;
+        mc mb --ignore-existing local/ifood-data-lake;
+        echo 'Bucket ifood-data-lake criado com sucesso';
+      "
+    networks:
+      - ifood-network
+ 
+  # ── 3. Jupyter + PySpark ──────────────────────────────────────────────────────
+  # Ambiente completo com Python, PySpark e Delta Lake prontos.
   jupyter:
     image: quay.io/jupyter/pyspark-notebook:spark-3.5.0
     container_name: ifood_jupyter
@@ -32,9 +59,10 @@ services:
     volumes:
       - ./src:/home/jovyan/work/src
       - ./analysis:/home/jovyan/work/analysis
-      - ./landing_temp:/home/jovyan/work/landing_temp   # ← arquivos brutos persistidos
+      - ./landing_temp:/home/jovyan/work/landing_temp
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
  
 volumes:
   minio_data:
