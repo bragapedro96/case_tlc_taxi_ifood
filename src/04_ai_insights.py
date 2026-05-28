@@ -26,7 +26,7 @@ Execução:
   # Skill 2 — assistente de consultas
   python work/src/04_ai_insights.py --skill query
 """
- 
+
 import os
 import sys
 import json
@@ -34,7 +34,6 @@ import argparse
 import anthropic
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
- 
  
 # ── Configuração do Spark ─────────────────────────────────────────────────────
 def criar_spark():

@@ -11,31 +11,44 @@ leia cada arquivo de forma flexível sem travar na conversão de tipos.
 """
  
 import os
+import sys
 import requests
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+
+# Adiciona o diretório src ao path para importar o logger
+sys.path.append(os.path.dirname(__file__))
+from logger import obter_logger, LoggerPipeline
+ 
+logger = obter_logger(__name__)
  
 # ── Configuração da sessão Spark ──────────────────────────────────────────────
-spark = SparkSession.builder \
-    .appName("ifood-bronze-ingestion") \
-    .config(
-        "spark.jars.packages",
-        "org.apache.hadoop:hadoop-aws:3.3.4,"
-        "io.delta:delta-spark_2.12:3.2.0"
-    ) \
-    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-    .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
-    .config("spark.hadoop.fs.s3a.access.key", "admin") \
-    .config("spark.hadoop.fs.s3a.secret.key", "admin123") \
-    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
-    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-    .config("spark.sql.parquet.enableVectorizedReader", "false") \
-    .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
-    .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-    .getOrCreate()
- 
-spark.sparkContext.setLogLevel("WARN")
+def criar_spark() -> SparkSession:
+    logger.info("Iniciando sessão Spark...")
+    try:
+        spark = SparkSession.builder \
+            .appName("ifood-bronze-ingestion") \
+            .config(
+                "spark.jars.packages",
+                "org.apache.hadoop:hadoop-aws:3.3.4,"
+                "io.delta:delta-spark_2.12:3.2.0"
+            ) \
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+            .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000") \
+            .config("spark.hadoop.fs.s3a.access.key", "admin") \
+            .config("spark.hadoop.fs.s3a.secret.key", "admin123") \
+            .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+            .config("spark.sql.parquet.enableVectorizedReader", "false") \
+            .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
+            .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
+            .getOrCreate()
+        logger.info("Sessão Spark iniciada com sucesso.")
+        return spark
+    except Exception as e:
+        logger.critical(f"Falha ao iniciar sessão Spark: {e}", exc_info=True)
+        sys.exit(1)
  
 # ── Parâmetros ────────────────────────────────────────────────────────────────
 MESES    = ["01", "02", "03", "04", "05"]
@@ -49,84 +62,130 @@ TAXI_TYPES = {
  
 os.makedirs(TEMP_DIR, exist_ok=True)
  
- 
-def download_arquivos(taxi_type: str):
-    """Baixa os arquivos parquet de um tipo de táxi para o diretório temporário."""
-    print(f"\n=== Download: {taxi_type} taxi ===")
-    for mes in MESES:
-        nome    = f"{taxi_type}_tripdata_2023-{mes}.parquet"
-        destino = os.path.join(TEMP_DIR, nome)
- 
-        if os.path.exists(destino):
-            print(f"  [SKIP] {nome} já existe localmente.")
-            continue
- 
-        url = f"{BASE_URL}/{nome}"
-        print(f"  [DOWNLOAD] {url}")
-        resposta = requests.get(url, stream=True, timeout=120)
-        resposta.raise_for_status()
- 
-        with open(destino, "wb") as f:
-            for chunk in resposta.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print(f"  [OK] {nome} salvo.")
- 
- 
-def salvar_bronze(taxi_type: str, bronze_path: str):
+# ── Download dos arquivos ───────────────────────────────────────────────────── 
+def download_arquivos(taxi_type: str) -> list:
     """
-    Lê os parquets arquivo por arquivo para evitar conflito de schema,
-    adiciona a coluna taxi_type e salva no Bronze em formato Delta.
- 
-    Lemos arquivo por arquivo (não com *) porque os arquivos de 2023
-    têm schemas inconsistentes entre meses. O unionByName com
-    allowMissingColumns garante que colunas extras em alguns meses
-    não quebrem a união.
+    Baixa os arquivos parquet de um tipo de táxi.
+    Retorna lista de arquivos baixados com sucesso.
+    Pula arquivos que já existem localmente (idempotência).
     """
-    print(f"\n=== Bronze: {taxi_type} taxi ===")
+    arquivos_ok = []
  
-    dfs = []
-    for mes in MESES:
-        caminho = f"{TEMP_DIR}/{taxi_type}_tripdata_2023-{mes}.parquet"
-        df = spark.read \
-            .option("mergeSchema", "true") \
-            .parquet(caminho)
-        df = df.withColumn("taxi_type", F.lit(taxi_type))
-        dfs.append(df)
-        print(f"  [LIDO] 2023-{mes} — {df.columns}")
+    with LoggerPipeline(logger, f"Download {taxi_type} taxi") as ctx:
+        for mes in MESES:
+            nome    = f"{taxi_type}_tripdata_2023-{mes}.parquet"
+            destino = os.path.join(TEMP_DIR, nome)
  
-    # Une todos os meses, tolerando colunas ausentes em alguns arquivos
-    df_unido = dfs[0]
-    for df in dfs[1:]:
-        df_unido = df_unido.unionByName(df, allowMissingColumns=True)
+            if os.path.exists(destino):
+                ctx.info(f"[SKIP] {nome} já existe localmente.")
+                arquivos_ok.append(destino)
+                continue
  
-    total = df_unido.count()
-    print(f"  Total de registros: {total:,}")
+            url = f"{BASE_URL}/{nome}"
+            ctx.info(f"[DOWNLOAD] {url}")
  
-    df_unido.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .save(bronze_path)
+            try:
+                resposta = requests.get(url, stream=True, timeout=120)
+                resposta.raise_for_status()
  
-    print(f"  [OK] Salvo em: {bronze_path}")
-    return total
+                with open(destino, "wb") as f:
+                    for chunk in resposta.iter_content(chunk_size=8192):
+                        f.write(chunk)
+ 
+                tamanho_mb = os.path.getsize(destino) / (1024 * 1024)
+                ctx.info(f"[OK] {nome} salvo — {tamanho_mb:.1f} MB")
+                arquivos_ok.append(destino)
+ 
+            except requests.exceptions.Timeout:
+                ctx.error(f"[ERRO] Timeout ao baixar {nome} — verifique a conexão")
+            except requests.exceptions.HTTPError as e:
+                ctx.error(f"[ERRO] HTTP {e.response.status_code} ao baixar {nome}")
+            except Exception as e:
+                ctx.error(f"[ERRO] Falha inesperada ao baixar {nome}: {e}")
+ 
+    return arquivos_ok
+ 
+# ── Carga na camada Bronze ──────────────────────────────────────────────────── 
+def salvar_bronze(spark: SparkSession, taxi_type: str, bronze_path: str) -> int:
+    """
+    Lê os parquets arquivo por arquivo, adiciona taxi_type
+    e salva no Bronze em formato Delta.
+    Retorna o total de registros salvos.
+    """
+    with LoggerPipeline(logger, f"Bronze {taxi_type} taxi") as ctx:
+        dfs = []
+        for mes in MESES:
+            caminho = f"{TEMP_DIR}/{taxi_type}_tripdata_2023-{mes}.parquet"
+ 
+            if not os.path.exists(caminho):
+                ctx.warning(f"Arquivo não encontrado, pulando: {caminho}")
+                continue
+ 
+            try:
+                df = spark.read \
+                    .option("mergeSchema", "true") \
+                    .parquet(caminho)
+                df = df.withColumn("taxi_type", F.lit(taxi_type))
+                dfs.append(df)
+                ctx.info(f"[LIDO] 2023-{mes} — {len(df.columns)} colunas")
+            except Exception as e:
+                ctx.error(f"[ERRO] Falha ao ler 2023-{mes}: {e}")
+                raise
+ 
+        if not dfs:
+            raise RuntimeError(f"Nenhum arquivo encontrado para {taxi_type} taxi.")
+ 
+        df_unido = dfs[0]
+        for df in dfs[1:]:
+            df_unido = df_unido.unionByName(df, allowMissingColumns=True)
+ 
+        total = df_unido.count()
+        ctx.info(f"Total de registros: {total:,}")
+ 
+        try:
+            df_unido.write \
+                .format("delta") \
+                .mode("overwrite") \
+                .save(bronze_path)
+            ctx.info(f"[OK] Salvo em: {bronze_path}")
+        except Exception as e:
+            ctx.error(f"[ERRO] Falha ao salvar no MinIO: {e}")
+            raise
+ 
+        return total
  
  
 # ── Execução ──────────────────────────────────────────────────────────────────
-print("\n" + "="*55)
-print(" INGESTÃO — CAMADA BRONZE")
-print("="*55)
+def main():
+    with LoggerPipeline(logger, "INGESTÃO — CAMADA BRONZE") as ctx:
+        spark = criar_spark()
+        spark.sparkContext.setLogLevel("WARN")
  
-totais = {}
-for taxi_type, bronze_path in TAXI_TYPES.items():
-    download_arquivos(taxi_type)
-    totais[taxi_type] = salvar_bronze(taxi_type, bronze_path)
+        totais = {}
+        erros  = []
  
-print("\n" + "="*55)
-print(" RESUMO DA INGESTÃO")
-print("="*55)
-for taxi_type, total in totais.items():
-    print(f"  {taxi_type:>6} taxi: {total:>12,} registros")
-print(f"  {'TOTAL':>6}      : {sum(totais.values()):>12,} registros")
-print("\nIngestão concluída!")
+        for taxi_type, bronze_path in TAXI_TYPES.items():
+            try:
+                download_arquivos(taxi_type)
+                totais[taxi_type] = salvar_bronze(spark, taxi_type, bronze_path)
+            except Exception as e:
+                logger.error(f"Falha na ingestão de {taxi_type} taxi: {e}", exc_info=True)
+                erros.append(taxi_type)
  
-spark.stop()
+        # Resumo
+        logger.info("=" * 45)
+        logger.info("RESUMO DA INGESTÃO")
+        logger.info("=" * 45)
+        for taxi_type, total in totais.items():
+            logger.info(f"{taxi_type:>6} taxi: {total:>12,} registros")
+        if totais:
+            logger.info(f"{'TOTAL':>6}      : {sum(totais.values()):>12,} registros")
+        if erros:
+            logger.error(f"Táxis com erro: {', '.join(erros)}")
+            sys.exit(1)
+ 
+        spark.stop()
+ 
+ 
+if __name__ == "__main__":
+    main()
