@@ -1,0 +1,28 @@
+# Dockerfile.streamlit — Imagem do dashboard Streamlit
+# Imagem leve baseada em Python — não precisa de Java ou Spark
+# pois lê os arquivos Parquet direto do MinIO via boto3 e pyarrow.
+ 
+FROM python:3.11-slim
+ 
+WORKDIR /app
+ 
+# Instala as dependências
+RUN pip install --no-cache-dir \
+    streamlit==1.35.0 \
+    pandas==2.1.4 \
+    pyarrow==14.0.2 \
+    boto3==1.34.0 \
+    matplotlib==3.8.2
+ 
+# Copia o arquivo do dashboard
+COPY dashboard.py .
+ 
+# Porta padrão do Streamlit
+EXPOSE 8501
+ 
+# Inicia o app desabilitando o telemetry e o browser automático
+CMD ["streamlit", "run", "dashboard.py", \
+     "--server.port=8501", \
+     "--server.address=0.0.0.0", \
+     "--browser.gatherUsageStats=false"]
+    

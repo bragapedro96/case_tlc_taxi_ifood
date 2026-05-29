@@ -55,7 +55,7 @@ services:
     networks:
       - ifood-network
     env_file:
-      - .env                                   # ← carrega variáveis do .env
+      - .env
     environment:
       - JUPYTER_ENABLE_LAB=yes
     volumes:
@@ -97,7 +97,7 @@ services:
     networks:
       - ifood-network
     env_file:
-      - .env                                   # ← carrega variáveis do .env
+      - .env
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -122,7 +122,7 @@ services:
     networks:
       - ifood-network
     env_file:
-      - .env                                   # ← carrega variáveis do .env
+      - .env
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -150,7 +150,7 @@ services:
     networks:
       - ifood-network
     env_file:
-      - .env                                   # ← carrega variáveis do .env
+      - .env
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -161,3 +161,19 @@ services:
       - ./src:/opt/airflow/src
       - ./landing_temp:/opt/airflow/landing_temp
     command: scheduler
+ 
+  # ── 8. Streamlit Dashboard ───────────────────────────────────────────────────
+  # Interface web para visualizar os resultados do case.
+  # Le diretamente das tabelas Gold no MinIO — sem precisar do Spark.
+  streamlit:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.streamlit
+    container_name: ifood_streamlit
+    ports:
+      - "8501:8501"
+    networks:
+      - ifood-network
+    depends_on:
+      minio:
+        condition: service_healthy
