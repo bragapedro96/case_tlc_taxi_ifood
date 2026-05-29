@@ -38,6 +38,7 @@ Ouro    ->  respostas prontas para consumo (MinIO + Delta Lake)
 | **PostgreSQL** | Banco de metadados do Airflow | Armazena historico e status das execucoes |
 | **Jupyter Notebook** | Analise exploratoria e entrega | Codigo, resultado e graficos no mesmo documento |
 | **pytest** | Testes unitarios | Valida as funcoes de limpeza e transformacao |
+| **Streamlit** | Dashboard interativo | Visualização dos resultados sem depender do Spark |
 
 ---
 
@@ -66,6 +67,9 @@ ifood-case/
 │   ├── __init__.py
 │   └── test_transformation.py
 └── landing_temp/
+├── app/
+│   ├── dashboard.py
+│   └── Dockerfile.streamlit
 ```
 
 ---
@@ -181,7 +185,16 @@ ingestao_bronze -> transformacao_prata -> agregacoes_ouro
 
 A etapa de ingestao faz o download de ~800MB de dados — pode demorar **10 a 20 minutos** dependendo da conexao.
 
-### Passo 7 — Acessar o Jupyter para as analises
+### Passo 7 — Acessar o Dashboard
+
+Apos o pipeline concluir, abra o dashboard para ver os resultados:
+
+http://localhost:8501
+
+O dashboard exibe automaticamente as respostas as perguntas do case
+e as analises bonus com graficos interativos.
+
+### Passo 8 — Acessar o Jupyter para as analises
 
 ```bash
 # Linux / Mac
@@ -197,7 +210,7 @@ Copie a URL com o token e abra no browser. Navegue ate `analysis/04_analysis.ipy
 > Esse processo pode demorar **3 a 5 minutos** e nao exibe barra de progresso
 > — isso e normal, aguarde ate aparecer `Spark pronto!` no output da celula.
 
-### Passo 8 — Rodar os testes unitarios
+### Passo 9 — Rodar os testes unitarios
 
 No terminal do Jupyter:
 
@@ -216,6 +229,7 @@ pytest tests/test_transformation.py -v
 | Airflow | http://localhost:8080 | admin / admin |
 | Jupyter Lab | http://localhost:8888 | ver token nos logs |
 | Spark UI | http://localhost:4040 | — |
+| Streamlit Dashboard | http://localhost:8501 | — |
 
 ---
 
