@@ -5,13 +5,8 @@ Lê as tabelas Bronze de yellow e green taxi, aplica limpeza,
 seleciona as colunas obrigatórias do case, unifica as duas fontes
 numa única tabela e salva na camada Prata em formato Delta.
  
-Filtros de qualidade aplicados:
-- Apenas corridas de janeiro a maio de 2023 (escopo do case)
-- passenger_count > 0 e não nulo
-- total_amount >= 0 e < 10.000 e não nulo
-- datas de pickup e dropoff não nulas
-- dropoff sempre após o pickup
-- duração da corrida dentro do limite IQR calculado dinamicamente
+As funções de limpeza ficam em transformation_functions.py
+para permitir testes unitários independentes.
 """
  
 import os
@@ -21,8 +16,10 @@ from pyspark.sql import functions as F
  
 sys.path.append(os.path.dirname(__file__))
 from logger import obter_logger, LoggerPipeline
+from transformation_functions import limpar, calcular_corte_iqr
  
 logger = obter_logger(__name__)
+ 
  
 # ── Configuração da sessão Spark ──────────────────────────────────────────────
 def criar_spark() -> SparkSession:
@@ -67,11 +64,7 @@ COLUNAS_FINAIS = [
     "taxi_type",
 ]
  
-DATA_INICIO = "2023-01-01"
-DATA_FIM    = "2023-05-31"
  
- 
-# ── Funções ───────────────────────────────────────────────────────────────────
 def ler_e_padronizar(spark: SparkSession, path: str, taxi_type: str):
     """
     Lê a tabela Bronze e padroniza o schema.
@@ -88,69 +81,6 @@ def ler_e_padronizar(spark: SparkSession, path: str, taxi_type: str):
     except Exception as e:
         logger.error(f"Falha ao ler Bronze {taxi_type}: {e}", exc_info=True)
         raise
- 
- 
-def calcular_corte_iqr(df) -> float:
-    """
-    Calcula o limite superior de duração usando o critério IQR.
-    Fórmula: corte = P75 + 1.5 * (P75 - P25)
-    Calculado dinamicamente a partir dos dados — sem hardcode.
-    """
-    try:
-        percentis = df \
-            .filter(
-                (F.col("tpep_pickup_datetime") >= DATA_INICIO) &
-                (F.col("tpep_pickup_datetime") <= DATA_FIM) &
-                (F.col("tpep_dropoff_datetime") > F.col("tpep_pickup_datetime"))
-            ) \
-            .withColumn(
-                "duracao_horas",
-                (F.unix_timestamp("tpep_dropoff_datetime") - F.unix_timestamp("tpep_pickup_datetime")) / 3600
-            ) \
-            .agg(
-                F.percentile_approx("duracao_horas", 0.25).alias("p25"),
-                F.percentile_approx("duracao_horas", 0.75).alias("p75"),
-            ) \
-            .collect()[0]
- 
-        p25   = percentis["p25"]
-        p75   = percentis["p75"]
-        iqr   = p75 - p25
-        corte = p75 + 1.5 * iqr
- 
-        logger.info(f"P25={p25:.4f}h | P75={p75:.4f}h | IQR={iqr:.4f}h | Corte={corte:.4f}h ({corte*60:.1f} min)")
-        return corte
- 
-    except Exception as e:
-        logger.error(f"Falha ao calcular corte IQR: {e}", exc_info=True)
-        raise
- 
- 
-def limpar(df, corte: float):
-    """
-    Aplica todos os filtros de qualidade.
-    O parâmetro corte é o limite superior de duração em horas,
-    calculado dinamicamente pelo critério IQR.
-    """
-    return df \
-        .withColumn(
-            "duracao_horas",
-            (F.unix_timestamp("tpep_dropoff_datetime") - F.unix_timestamp("tpep_pickup_datetime")) / 3600
-        ) \
-        .filter(
-            (F.col("tpep_pickup_datetime") >= DATA_INICIO) &
-            (F.col("tpep_pickup_datetime") <= DATA_FIM) &
-            F.col("passenger_count").isNotNull() &
-            (F.col("passenger_count") > 0) &
-            F.col("total_amount").isNotNull() &
-            (F.col("total_amount") >= 0) &
-            (F.col("total_amount") < 10000) &
-            F.col("tpep_pickup_datetime").isNotNull() &
-            F.col("tpep_dropoff_datetime").isNotNull() &
-            (F.col("tpep_dropoff_datetime") > F.col("tpep_pickup_datetime")) &
-            (F.col("duracao_horas") <= corte)
-        ) \
-        .drop("duracao_horas")
  
  
 # ── Execução ──────────────────────────────────────────────────────────────────
@@ -174,6 +104,7 @@ def main():
  
         with LoggerPipeline(logger, "Cálculo do corte IQR"):
             corte = calcular_corte_iqr(df_unido)
+            logger.info(f"Corte IQR: {corte:.4f}h ({corte*60:.1f} min)")
  
         with LoggerPipeline(logger, "Limpeza e filtragem"):
             df_silver   = limpar(df_unido, corte)
