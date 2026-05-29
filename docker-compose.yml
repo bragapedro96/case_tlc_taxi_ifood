@@ -2,10 +2,13 @@ networks:
   ifood-network:
     driver: bridge
  
+volumes:
+  minio_data:
+  postgres_data:
+ 
 services:
  
   # ── 1. MinIO ─────────────────────────────────────────────────────────────────
-  # Armazenamento de objetos local — simula o S3 da AWS.
   minio:
     image: minio/minio:latest
     container_name: ifood_minio
@@ -27,8 +30,6 @@ services:
       retries: 5
  
   # ── 2. MinIO Init ─────────────────────────────────────────────────────────────
-  # Cria o bucket automaticamente ao subir o ambiente.
-  # Roda uma única vez e encerra — não precisa ficar ativo.
   minio-init:
     image: minio/mc:latest
     container_name: ifood_minio_init
@@ -39,13 +40,12 @@ services:
       /bin/sh -c "
         mc alias set local http://minio:9000 admin admin123;
         mc mb --ignore-existing local/ifood-data-lake;
-        echo 'Bucket ifood-data-lake criado com sucesso';
+        echo 'Bucket ifood-data-lake pronto.';
       "
     networks:
       - ifood-network
  
   # ── 3. Jupyter + PySpark ──────────────────────────────────────────────────────
-  # Ambiente completo com Python, PySpark e Delta Lake prontos.
   jupyter:
     image: quay.io/jupyter/pyspark-notebook:spark-3.5.0
     container_name: ifood_jupyter
@@ -64,5 +64,92 @@ services:
       minio:
         condition: service_healthy
  
-volumes:
-  minio_data:
+  # ── 4. PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: ifood_postgres
+    networks:
+      - ifood-network
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+ 
+  # ── 5. Airflow Init ───────────────────────────────────────────────────────────
+  # Usa imagem customizada com PySpark instalado
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ifood_airflow_init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ifood-network
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./landing_temp:/opt/airflow/landing_temp
+    entrypoint: ["/bin/bash", "-c", "airflow db migrate && airflow users create -u admin -p admin -f Admin -l User -r Admin -e admin@ifood.com && echo 'Airflow inicializado com sucesso.'"]
+ 
+  # ── 6. Airflow Webserver ──────────────────────────────────────────────────────
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ifood_airflow_webserver
+    depends_on:
+      - airflow-init
+    ports:
+      - "8080:8080"
+    networks:
+      - ifood-network
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./landing_temp:/opt/airflow/landing_temp
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+ 
+  # ── 7. Airflow Scheduler ──────────────────────────────────────────────────────
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ifood_airflow_scheduler
+    depends_on:
+      - airflow-init
+    networks:
+      - ifood-network
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./landing_temp:/opt/airflow/landing_temp
+    command: scheduler

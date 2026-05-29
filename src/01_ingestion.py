@@ -21,6 +21,14 @@ sys.path.append(os.path.dirname(__file__))
 from logger import obter_logger, LoggerPipeline
  
 logger = obter_logger(__name__)
+
+# ── Detecta o ambiente e define o TEMP_DIR correto ───────────────────────────
+if os.path.exists("/home/jovyan"):
+    TEMP_DIR = "/home/jovyan/work/landing_temp"
+else:
+    TEMP_DIR = "/opt/airflow/landing_temp"
+ 
+logger.info(f"Ambiente detectado — TEMP_DIR: {TEMP_DIR}")
  
 # ── Configuração da sessão Spark ──────────────────────────────────────────────
 def criar_spark() -> SparkSession:
@@ -53,7 +61,6 @@ def criar_spark() -> SparkSession:
 # ── Parâmetros ────────────────────────────────────────────────────────────────
 MESES    = ["01", "02", "03", "04", "05"]
 BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
-TEMP_DIR = "/home/jovyan/work/landing_temp"
  
 TAXI_TYPES = {
     "yellow": "s3a://ifood-data-lake/bronze/yellow_taxi",
