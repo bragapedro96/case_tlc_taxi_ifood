@@ -60,6 +60,7 @@ services:
       - ./src:/home/jovyan/work/src
       - ./analysis:/home/jovyan/work/analysis
       - ./landing_temp:/home/jovyan/work/landing_temp
+      - ./tests:/home/jovyan/work/tests        # ← testes unitários
     depends_on:
       minio:
         condition: service_healthy
@@ -83,7 +84,6 @@ services:
       retries: 5
  
   # ── 5. Airflow Init ───────────────────────────────────────────────────────────
-  # Usa imagem customizada com PySpark instalado
   airflow-init:
     build:
       context: .
