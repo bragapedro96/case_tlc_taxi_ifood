@@ -30,14 +30,14 @@ Ouro    ->  respostas prontas para consumo (MinIO + Delta Lake)
 
 | Ferramenta | Papel no projeto | Por que foi escolhida |
 |---|---|---|
-| **Docker Compose** | Orquestra todos os servicos | Ambiente reproduzivel sem instalacoes locais |
-| **MinIO** | Data Lake local (simula S3) | API 100% compativel com AWS S3 |
-| **PySpark** | Processamento e transformacao | Processa milhoes de registros em paralelo |
+| **Docker Compose** | Orquestra todos os servicos | Ambiente reproduzivel sem instalações locais |
+| **MinIO** | Data Lake local (simula S3) | API 100% compatível com AWS S3 |
+| **PySpark** | Processamento e transformação | Processa milhões de registros em paralelo |
 | **Delta Lake** | Formato de armazenamento | Transacoes ACID, versionamento e schema enforcement |
-| **Apache Airflow** | Orquestracao do pipeline | Interface visual, retry automatico e historico de execucoes |
-| **PostgreSQL** | Banco de metadados do Airflow | Armazena historico e status das execucoes |
-| **Jupyter Notebook** | Analise exploratoria e entrega | Codigo, resultado e graficos no mesmo documento |
-| **pytest** | Testes unitarios | Valida as funcoes de limpeza e transformacao |
+| **Apache Airflow** | Orquestração do pipeline | Interface visual, retry automático e histórico de execuções |
+| **PostgreSQL** | Banco de metadados do Airflow | Armazena histórico e status das execuções |
+| **Jupyter Notebook** | Análise exploratória e entrega | Código, resultado e gráfico no mesmo documento |
+| **pytest** | Testes unitários | Valida as funções de limpeza e transformação |
 | **Streamlit** | Dashboard interativo | Visualização dos resultados sem depender do Spark |
 
 ---
@@ -90,40 +90,40 @@ Dados limpos, filtrados e unificados. Particionado por `taxi_type`.
 Filtros aplicados:
 
 - Periodo: apenas corridas de **janeiro a maio de 2023**
-- `passenger_count > 0` e nao nulo
-- `total_amount >= 0` e `< 10.000` e nao nulo
+- `passenger_count > 0` e não nulo
+- `total_amount >= 0` e `< 10.000` e não nulo
 - `tpep_dropoff_datetime > tpep_pickup_datetime`
-- Duracao maxima pelo criterio **IQR calculado dinamicamente** — corte em ~38 min
+- Duração máxima pelo critério **IQR calculado dinamicamente** — corte em ~38 min
 
 ### Ouro
 
-Agregacoes pre-computadas prontas para consumo:
+Agregações pre-computadas prontas para consumo:
 
-| Tabela | Conteudo |
+| Tabela | Conteúdo |
 |---|---|
-| `avg_total_by_month` | Media do total_amount por mes — yellow taxi |
-| `avg_passengers_by_hour` | Media de passageiros por hora em maio — todos os taxis |
-| `trips_by_taxi_type` | Volume e ticket medio por tipo e mes |
-| `top_hours_by_taxi_type` | Horarios de pico por tipo de taxi |
+| `avg_total_by_month` | Média do total_amount por mês — yellow taxi |
+| `avg_passengers_by_hour` | Média de passageiros por hora em maio — todos os taxis |
+| `trips_by_taxi_type` | Volume e ticket médio por tipo e mês |
+| `top_hours_by_taxi_type` | Horários de pico por tipo de taxi |
 
 ---
 
 ## Como executar
 
-### Pre-requisitos
+### Pré-requisitos
 
-- Docker Desktop instalado, aberto e em execucao
-- 8 GB de RAM disponivel
+- Docker Desktop instalado, aberto e em execução
+- 8 GB de RAM disponível
 - Git instalado
 
-### Passo 1 — Clonar o repositorio
+### Passo 1 — Clonar o repositório
 
 ```bash
 git clone https://github.com/seu-usuario/ifood-data-architecture-case.git
 cd ifood-data-architecture-case
 ```
 
-### Passo 2 — Criar pastas necessarias
+### Passo 2 — Criar pastas necessárias
 
 ```bash
 # Linux / Mac
@@ -147,7 +147,7 @@ Edite o arquivo `.env` se quiser usar as skills de IA — a `ANTHROPIC_API_KEY` 
 
 ### Passo 4 — Construir e subir a infraestrutura
 
-Na primeira execucao use `--build` para construir a imagem customizada do Airflow com PySpark:
+Na primeira execução use `--build` para construir a imagem customizada do Airflow com PySpark:
 
 ```bash
 docker compose up -d --build
@@ -174,7 +174,7 @@ Todos os servicos devem aparecer como `running`. O `minio-init` vai aparecer com
 1. Abra **http://localhost:8080**
 2. Entre com usuario `admin` e senha `admin`
 3. Ative o DAG `pipeline_taxi` clicando no toggle azul
-4. Clique em **Trigger DAG** (icone de play) para disparar a execucao
+4. Clique em **Trigger DAG** (icone de play) para disparar a execução
 5. Clique em **Graph** para acompanhar o progresso
 
 O pipeline tem 3 etapas que rodam em sequencia:
@@ -192,9 +192,9 @@ Apos o pipeline concluir, abra o dashboard para ver os resultados:
 http://localhost:8501
 
 O dashboard exibe automaticamente as respostas as perguntas do case
-e as analises bonus com graficos interativos.
+e as análises bônus com gráficos interativos.
 
-### Passo 8 — Acessar o Jupyter para as analises
+### Passo 8 — Acessar o Jupyter para as análises
 
 ```bash
 # Linux / Mac
@@ -204,8 +204,8 @@ docker logs ifood_jupyter 2>&1 | grep token
 docker logs ifood_jupyter 2>&1 | findstr token
 ```
 
-Copie a URL com o token e abra no browser. Navegue ate `analysis/04_analysis.ipynb` e execute as celulas para ver os graficos.
-> **Nota:** Na primeira execucao do notebook, a Celula 1 vai baixar os pacotes
+Copie a URL com o token e abra no browser. Navegue ate `analysis/04_analysis.ipynb` e execute as celulas para ver os gráficos.
+> **Nota:** Na primeira execução do notebook, a Celula 1 vai baixar os pacotes
 > `hadoop-aws` e `delta-spark` da internet antes de iniciar o Spark.
 > Esse processo pode demorar **3 a 5 minutos** e nao exibe barra de progresso
 > — isso e normal, aguarde ate aparecer `Spark pronto!` no output da celula.
@@ -236,10 +236,10 @@ pytest tests/test_transformation.py -v
 ## Decisoes tecnicas
 
 **Por que Delta Lake e nao Parquet puro?**
-Delta Lake adiciona um transaction log que garante que reprocessamentos com `mode("overwrite")` sejam atomicos — nunca deixa a tabela em estado inconsistente. Permite time travel para auditar versoes anteriores.
+Delta Lake adiciona um transaction log que garante que reprocessamentos com `mode("overwrite")` sejam atômicos — nunca deixa a tabela em estado inconsistente. Permite time travel para auditar versoes anteriores.
 
-**Por que IQR para remover outliers de duracao?**
-A distribuicao de duracao tem p99 = 1.08h e maximo de 167h. A media seria distorcida pelos outliers. O IQR usa os percentis centrais (P25 e P75), sendo robusto a valores extremos. O corte e calculado dinamicamente a cada execucao — sem valores hardcoded.
+**Por que IQR para remover outliers de duração?**
+A distribuição de duracao tem p99 = 1.08h e maximo de 167h. A media seria distorcida pelos outliers. O IQR usa os percentis centrais (P25 e P75), sendo robusto a valores extremos. O corte e calculado dinamicamente a cada execução — sem valores hardcoded.
 
 **Por que Airflow?**
 O Airflow garante que cada etapa so executa se a anterior foi bem-sucedida, com retry automatico, historico de execucoes e interface visual. Em producao isso e essencial para monitorar e debugar pipelines.
@@ -254,15 +254,15 @@ O container do Airflow nao tem PySpark por padrao. O Dockerfile instala Java e P
 
 ## Testes unitarios
 
-O projeto tem **16 testes** cobrindo os casos criticos da limpeza de dados:
+O projeto tem **16 testes** cobrindo os casos críticos da limpeza de dados:
 
-- Registros validos sao mantidos
+- Registros validos são mantidos
 - `passenger_count` zero, negativo ou nulo e removido
 - `total_amount` negativo, acima de 10.000 ou nulo e removido
-- Datas fora do periodo Jan-Mai 2023 sao removidas
-- Corridas onde dropoff e antes do pickup sao removidas
-- Corridas com duracao acima do corte IQR sao removidas
-- A coluna auxiliar `duracao_horas` nao aparece no resultado final
+- Datas fora do período Jan-Mai 2023 são removidas
+- Corridas onde dropoff e antes do pickup são removidas
+- Corridas com duracao acima do corte IQR são removidas
+- A coluna auxiliar `duracao_horas` não aparece no resultado final
 - O corte IQR e sempre positivo
 
 ---
