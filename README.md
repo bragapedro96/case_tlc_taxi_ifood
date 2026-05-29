@@ -6,7 +6,7 @@
 
 ## Arquitetura
 
-Este projeto implementa a **arquitetura medalhão** (Bronze → Prata → Ouro) sobre um Data Lake local, orquestrado pelo Apache Airflow e executado com PySpark e Delta Lake.
+Este projeto implementa a **arquitetura medalhão** (Bronze -> Prata -> Ouro) sobre um Data Lake local, orquestrado pelo Apache Airflow e executado com PySpark e Delta Lake.
 
 ```
 NYC TLC (fonte)
@@ -20,8 +20,8 @@ Prata   ->  dados limpos e unificados (MinIO + Delta Lake)
     v  PySpark agregacoes
 Ouro    ->  respostas prontas para consumo (MinIO + Delta Lake)
     |
-    |-->  Apache Airflow  (orquestracao visual)
-    |-->  Jupyter Notebook (analise e visualizacoes)
+    |--> Apache Airflow  (orquestracao visual)
+    |--> Jupyter Notebook (analise e visualizacoes)
 ```
 
 ---
@@ -89,7 +89,7 @@ Filtros aplicados:
 - `passenger_count > 0` e nao nulo
 - `total_amount >= 0` e `< 10.000` e nao nulo
 - `tpep_dropoff_datetime > tpep_pickup_datetime`
-- Duracao maxima pelo criterio **IQR calculado dinamicamente** — P75 + 1.5 x IQR = 0.645h (~38 min)
+- Duracao maxima pelo criterio **IQR calculado dinamicamente** — corte em ~38 min
 
 ### Ouro
 
@@ -108,60 +108,98 @@ Agregacoes pre-computadas prontas para consumo:
 
 ### Pre-requisitos
 
-- Docker Desktop instalado e em execucao
+- Docker Desktop instalado, aberto e em execucao
 - 8 GB de RAM disponivel
+- Git instalado
 
-### Configuracao inicial
+### Passo 1 — Clonar o repositorio
 
 ```bash
-# 1. Clone o repositorio
 git clone https://github.com/seu-usuario/ifood-data-architecture-case.git
 cd ifood-data-architecture-case
+```
 
-# 2. Crie o arquivo de credenciais
+### Passo 2 — Criar pastas necessarias
+
+```bash
+# Linux / Mac
+mkdir -p landing_temp
+
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force landing_temp
+```
+
+### Passo 3 — Configurar credenciais
+
+```bash
+# Linux / Mac
 cp .env.example .env
-# Edite o .env com sua ANTHROPIC_API_KEY (opcional — apenas para as skills de IA)
 
-# 3. Suba toda a infraestrutura
+# Windows (PowerShell)
+Copy-Item .env.example .env
+```
+
+Edite o arquivo `.env` se quiser usar as skills de IA — a `ANTHROPIC_API_KEY` e opcional para o pipeline principal funcionar.
+
+### Passo 4 — Construir e subir a infraestrutura
+
+Na primeira execucao use `--build` para construir a imagem customizada do Airflow com PySpark:
+
+```bash
+docker compose up -d --build
+```
+
+Esse processo pode demorar **5 a 10 minutos** na primeira vez — o Docker esta baixando as imagens e instalando o PySpark no Airflow.
+
+Nas proximas vezes, o `--build` nao e necessario:
+
+```bash
 docker compose up -d
+```
 
-# 4. Verifique se todos os containers estao rodando
+### Passo 5 — Verificar os containers
+
+```bash
 docker compose ps
 ```
 
-### Via Airflow (recomendado)
+Todos os servicos devem aparecer como `running`. O `minio-init` vai aparecer como `exited (0)` — isso e normal, ele cria o bucket e encerra.
 
-1. Acesse **http://localhost:8080** — usuario `admin`, senha `admin`
-2. Ative o DAG `pipeline_ifood`
-3. Clique em **Trigger DAG** para disparar a execucao
-4. Acompanhe o progresso em **Graph View**
+### Passo 6 — Acessar o Airflow e disparar o pipeline
 
-### Via terminal do Jupyter
+1. Abra **http://localhost:8080**
+2. Entre com usuario `admin` e senha `admin`
+3. Ative o DAG `pipeline_ifood` clicando no toggle azul
+4. Clique em **Trigger DAG** (icone de play) para disparar a execucao
+5. Clique em **Graph** para acompanhar o progresso
 
-```bash
-# Obtenha o token de acesso
-docker logs ifood_jupyter 2>&1 | grep token      # Mac/Linux
-docker logs ifood_jupyter 2>&1 | findstr token   # Windows
+O pipeline tem 3 etapas que rodam em sequencia:
 
-# No terminal do Jupyter (http://localhost:8888)
-python work/src/pipeline.py                   # pipeline completo
-python work/src/pipeline.py --skip-ingestion  # pula o download
+```
+ingestao_bronze -> transformacao_prata -> agregacoes_ouro
 ```
 
-### Rodando os testes unitarios
+A etapa de ingestao faz o download de ~800MB de dados — pode demorar **10 a 20 minutos** dependendo da conexao.
+
+### Passo 7 — Acessar o Jupyter para as analises
 
 ```bash
-# No terminal do Jupyter
+# Linux / Mac
+docker logs ifood_jupyter 2>&1 | grep token
+
+# Windows (PowerShell)
+docker logs ifood_jupyter 2>&1 | findstr token
+```
+
+Copie a URL com o token e abra no browser. Navegue ate `analysis/04_analysis.ipynb` e execute as celulas para ver os graficos.
+
+### Passo 8 — Rodar os testes unitarios
+
+No terminal do Jupyter:
+
+```bash
 cd /home/jovyan/work
 pytest tests/test_transformation.py -v
-```
-
-### Skills de IA (opcional)
-
-```bash
-# Requer ANTHROPIC_API_KEY no arquivo .env
-python work/src/04_ai_insights.py --skill insights  # relatorio automatico
-python work/src/04_ai_insights.py --skill query     # assistente de consultas
 ```
 
 ---
@@ -180,7 +218,7 @@ python work/src/04_ai_insights.py --skill query     # assistente de consultas
 ## Decisoes tecnicas
 
 **Por que Delta Lake e nao Parquet puro?**
-Delta Lake adiciona um transaction log (`_delta_log/`) que garante que reprocessamentos com `mode("overwrite")` sejam atomicos — nunca deixa a tabela em estado inconsistente. Permite time travel para auditar versoes anteriores.
+Delta Lake adiciona um transaction log que garante que reprocessamentos com `mode("overwrite")` sejam atomicos — nunca deixa a tabela em estado inconsistente. Permite time travel para auditar versoes anteriores.
 
 **Por que IQR para remover outliers de duracao?**
 A distribuicao de duracao tem p99 = 1.08h e maximo de 167h. A media seria distorcida pelos outliers. O IQR usa os percentis centrais (P25 e P75), sendo robusto a valores extremos. O corte e calculado dinamicamente a cada execucao — sem valores hardcoded.
@@ -192,7 +230,7 @@ O Airflow garante que cada etapa so executa se a anterior foi bem-sucedida, com 
 Para permitir testes unitarios independentes. Funcoes embutidas no script principal nao podem ser testadas sem executar o pipeline inteiro.
 
 **Por que Dockerfile customizado para o Airflow?**
-O container do Airflow nao tem PySpark por padrao. O Dockerfile instala Java e PySpark diretamente no Airflow — arquitetura mais robusta e independente do container do Jupyter.
+O container do Airflow nao tem PySpark por padrao. O Dockerfile instala Java e PySpark diretamente — arquitetura mais robusta e independente do container do Jupyter.
 
 ---
 
