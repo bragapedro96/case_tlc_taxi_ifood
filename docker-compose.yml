@@ -54,13 +54,15 @@ services:
       - "4040:4040"
     networks:
       - ifood-network
+    env_file:
+      - .env                                   # ← carrega variáveis do .env
     environment:
       - JUPYTER_ENABLE_LAB=yes
     volumes:
       - ./src:/home/jovyan/work/src
       - ./analysis:/home/jovyan/work/analysis
       - ./landing_temp:/home/jovyan/work/landing_temp
-      - ./tests:/home/jovyan/work/tests        # ← testes unitários
+      - ./tests:/home/jovyan/work/tests
     depends_on:
       minio:
         condition: service_healthy
@@ -94,6 +96,8 @@ services:
         condition: service_healthy
     networks:
       - ifood-network
+    env_file:
+      - .env                                   # ← carrega variáveis do .env
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -117,6 +121,8 @@ services:
       - "8080:8080"
     networks:
       - ifood-network
+    env_file:
+      - .env                                   # ← carrega variáveis do .env
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -143,6 +149,8 @@ services:
       - airflow-init
     networks:
       - ifood-network
+    env_file:
+      - .env                                   # ← carrega variáveis do .env
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
