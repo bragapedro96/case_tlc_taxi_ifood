@@ -169,7 +169,7 @@ Todos os servicos devem aparecer como `running`. O `minio-init` vai aparecer com
 
 1. Abra **http://localhost:8080**
 2. Entre com usuario `admin` e senha `admin`
-3. Ative o DAG `pipeline_ifood` clicando no toggle azul
+3. Ative o DAG `pipeline_taxi` clicando no toggle azul
 4. Clique em **Trigger DAG** (icone de play) para disparar a execucao
 5. Clique em **Graph** para acompanhar o progresso
 

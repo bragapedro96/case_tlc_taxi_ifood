@@ -29,7 +29,7 @@ default_args = {
 }
  
 with DAG(
-    dag_id="pipeline_ifood",
+    dag_id="pipeline_taxi",
     description="Pipeline de dados NYC Taxi — Bronze → Prata → Ouro",
     default_args=default_args,
     start_date=datetime(2024, 1, 1),
