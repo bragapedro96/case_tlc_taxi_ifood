@@ -192,6 +192,10 @@ docker logs ifood_jupyter 2>&1 | findstr token
 ```
 
 Copie a URL com o token e abra no browser. Navegue ate `analysis/04_analysis.ipynb` e execute as celulas para ver os graficos.
+> **Nota:** Na primeira execucao do notebook, a Celula 1 vai baixar os pacotes
+> `hadoop-aws` e `delta-spark` da internet antes de iniciar o Spark.
+> Esse processo pode demorar **3 a 5 minutos** e nao exibe barra de progresso
+> — isso e normal, aguarde ate aparecer `Spark pronto!` no output da celula.
 
 ### Passo 8 — Rodar os testes unitarios
 
