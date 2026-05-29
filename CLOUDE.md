@@ -3,21 +3,30 @@ Este arquivo fornece contexto para que assistentes de IA (como o Claude) possam 
 
 O que é este projeto
 Pipeline de dados para ingestão, transformação e análise das corridas de táxi amarelo e verde de Nova York (Janeiro a Maio de 2023), desenvolvido como case técnico para vaga de Data Engineer.
-Implementa a arquitetura medalhão (Bronze → Prata → Ouro) sobre um Data Lake local usando Docker, MinIO, PySpark e Delta Lake.
+Implementa a arquitetura medalhão (Bronze → Prata → Ouro) sobre um Data Lake local usando Docker, MinIO, PySpark, Delta Lake e Apache Airflow.
 
 Estrutura do projeto
 ifood-case/
-├── docker-compose.yml         # Infraestrutura: MinIO + Jupyter
+├── docker-compose.yml              # Infraestrutura completa
+├── Dockerfile                      # Airflow customizado com PySpark e Java
+├── README.md                       # Documentação do projeto
+├── CLAUDE.md                       # Este arquivo
+├── dags/
+│   └── pipeline_taxi.py            # DAG do Airflow — orquestração visual
 ├── src/
-│   ├── 01_ingestion.py        # Camada Bronze: download + carga no MinIO
-│   ├── 02_transformation.py   # Camada Prata: limpeza + unificação yellow/green
-│   ├── 03_gold.py             # Camada Ouro: agregações prontas para consumo
-│   └── pipeline.py            # Orquestrador sequencial do pipeline
+│   ├── logger.py                   # Módulo central de logging estruturado
+│   ├── transformation_functions.py # Funções de limpeza extraídas para teste
+│   ├── 01_ingestion.py             # Camada Bronze: download + carga no MinIO
+│   ├── 02_transformation.py        # Camada Prata: limpeza + unificação
+│   ├── 03_gold.py                  # Camada Ouro: agregações do case
+│   ├── 04_ai_insights.py           # Skills de IA com API do Claude
+│   └── pipeline.py                 # Orquestrador sequencial alternativo (sem Airflow)
 ├── analysis/
-│   └── 04_analysis.ipynb      # Notebook com respostas e visualizações
-├── landing_temp/              # Parquets originais da NYC TLC (não versionados)
-├── CLAUDE.md                  # Este arquivo
-└── README.md                  # Documentação do projeto
+│   └── 04_analysis.ipynb           # Notebook com respostas e visualizações
+├── tests/
+│   ├── __init__.py
+│   └── test_transformation.py      # 16 testes unitários com pytest
+└── landing_temp/                   # Parquets originais da NYC TLC (não versionados)
 
 Como rodar o projeto
 Pré-requisitos
@@ -25,79 +34,92 @@ Pré-requisitos
 Docker Desktop instalado e em execução
 8 GB de RAM disponível
 
-Passo a passo
-bash# 1. Suba a infraestrutura
+Subindo o ambiente
+bash# Sobe toda a infraestrutura
 docker compose up -d
 
-# 2. Acesse o MinIO em http://localhost:9001 (admin / admin123)
-#    Crie o bucket: ifood-data-lake
+# Verifica se todos os containers estão rodando
+docker compose ps
+Via Airflow (recomendado)
 
-# 3. Pegue o token do Jupyter
-docker logs ifood_jupyter 2>&1 | grep token       # Mac/Linux
-docker logs ifood_jupyter 2>&1 | findstr token    # Windows
+Acesse http://localhost:8080 — usuário admin, senha admin
+Ative o DAG pipeline_ifood
+Clique em Trigger DAG para disparar a execução
+Acompanhe o progresso em Graph View
 
-# 4. No terminal do Jupyter, rode o pipeline completo
-python work/src/pipeline.py
+Via terminal do Jupyter
+bash# Pega o token de acesso
+docker logs ifood_jupyter 2>&1 | grep token
 
-# 5. Ou pule o download se os dados já existem em landing_temp/
-python work/src/pipeline.py --skip-ingestion
+# No terminal do Jupyter
+python work/src/pipeline.py                   # pipeline completo
+python work/src/pipeline.py --skip-ingestion  # pula o download
+Rodando os testes
+bash# No terminal do Jupyter
+cd /home/jovyan/work
+pytest tests/test_transformation.py -v
 
-# 6. Abra o notebook de análise
-# analysis/04_analysis.ipynb
+Serviços disponíveis
+ServiçoURLCredenciaisMinIO Consolehttp://localhost:9001admin / admin123Airflowhttp://localhost:8080admin / adminJupyter Labhttp://localhost:8888ver token nos logsSpark UIhttp://localhost:4040—
 
 Camadas do Data Lake
 Bronze — s3a://ifood-data-lake/bronze/
-Dados brutos preservados exatamente como vieram da fonte. Nunca modificar diretamente.
+Dados brutos preservados exatamente como vieram da fonte.
 
 bronze/yellow_taxi/ — corridas yellow com coluna taxi_type = "yellow"
 bronze/green_taxi/  — corridas green com coluna taxi_type = "green"
 
 Prata — s3a://ifood-data-lake/silver/all_taxi
 Dados limpos, filtrados e unificados. Particionado por taxi_type.
-
-Período: apenas Jan–Mai 2023
-Outliers de duração removidos via critério IQR dinâmico
 Colunas: VendorID, passenger_count, total_amount, tpep_pickup_datetime, tpep_dropoff_datetime, taxi_type
-
 Ouro — s3a://ifood-data-lake/gold/
-Agregações pré-computadas. Leitura direta — sem necessidade de processar a Prata.
+Tabelas pré-agregadas. Usar sempre que possível — muito mais rápidas que a Prata.
 
 avg_total_by_month     — média do total_amount por mês (yellow taxi)
-avg_passengers_by_hour — média de passageiros por hora em maio (todos os táxis)
+avg_passengers_by_hour — média de passageiros por hora em maio (todos)
 trips_by_taxi_type     — volume e ticket médio por tipo e mês
 top_hours_by_taxi_type — horários de pico por tipo de táxi
 
 
 Convenções de código
 
-Todos os scripts usam PySpark com Delta Lake
-Configuração do Spark é sempre feita via SparkSession.builder
+Todos os scripts importam from logger import obter_logger, LoggerPipeline
+Nunca usar print() — usar sempre logger.info(), logger.warning(), logger.error()
+Funções testáveis ficam em transformation_functions.py, não embutidas nos scripts
 Leitura de tabelas Delta: spark.read.format("delta").load(caminho)
 Escrita de tabelas Delta: df.write.format("delta").mode("overwrite").save(caminho)
 Colunas de tempo são extraídas com F.month(), F.hour(), F.unix_timestamp()
-Nomes de variáveis em snake_case, funções em português para clareza
+O script 01_ingestion.py detecta automaticamente o ambiente (Jupyter vs Airflow)
 
 
-Credenciais do ambiente local
-ServiçoURLUsuárioSenhaMinIO Consolehttp://localhost:9001adminadmin123Jupyter Labhttp://localhost:8888—ver token nos logs
+Contexto técnico importante
+Schema inconsistente nos Parquets da NYC TLC:
+Os arquivos de 2023 têm VendorID como INT32 em alguns meses e BIGINT em outros. Tratado com mergeSchema=true e enableVectorizedReader=false.
+Green taxi usa nomes de coluna diferentes:
+lpep_pickup_datetime e lpep_dropoff_datetime em vez de tpep_*. A padronização acontece em ler_e_padronizar() no 02_transformation.py.
+Corte IQR calculado dinamicamente:
+P25=0.12h, P75=0.33h → corte = 0.645h (~38 min). Recalculado a cada execução — sem hardcode.
+Detecção automática de ambiente no 01_ingestion.py:
+pythonif os.path.exists("/home/jovyan"):
+    TEMP_DIR = "/home/jovyan/work/landing_temp"  # Jupyter
+else:
+    TEMP_DIR = "/opt/airflow/landing_temp"        # Airflow
+Airflow usa Dockerfile customizado:
+A imagem base do Airflow não tem PySpark. O Dockerfile instala Java 17 e PySpark 3.5.1.
 
 Perguntas frequentes para o AI
 Como adicionar um novo mês de dados?
-Atualize a lista MESES em 01_ingestion.py e ajuste DATA_FIM em 02_transformation.py. Depois rode o pipeline completo.
-Como adicionar uma nova fonte de táxi (ex: FHV)?
-Adicione a entrada no dicionário TAXI_TYPES em 01_ingestion.py, trate renomeações de colunas em ler_e_padronizar() no 02_transformation.py e adicione a nova tabela Gold em 03_gold.py.
-Como consultar os dados sem o notebook?
-No terminal do Jupyter, abra um shell Python e use:
-pythonfrom pyspark.sql import SparkSession
-spark = SparkSession.builder.appName("query").getOrCreate()
-spark.read.format("delta").load("s3a://ifood-data-lake/gold/avg_total_by_month").show()
-Como regenerar apenas a camada Ouro sem reprocessar tudo?
+Atualize MESES em 01_ingestion.py e DATA_FIM em transformation_functions.py. Rode o pipeline completo.
+Como adicionar uma nova fonte de táxi?
+Adicione entrada em TAXI_TYPES no 01_ingestion.py, trate renomeações em ler_e_padronizar() no 02_transformation.py e adicione tabela Gold em 03_gold.py.
+Como rodar apenas a camada Ouro?
 bashpython work/src/03_gold.py
+Como consultar os dados sem o notebook?
+pythonspark.read.format("delta").load("s3a://ifood-data-lake/gold/avg_total_by_month").show()
 O que fazer se o Spark ficar sem memória?
-Reduza spark.sql.shuffle.partitions para 4 ou diminua SPARK_WORKER_MEMORY no docker-compose.yml.
-
-Contexto técnico importante
-
-Os arquivos Parquet da NYC TLC de 2023 têm schemas inconsistentes entre meses — VendorID aparece como INT32 em alguns e BIGINT em outros. Isso é tratado com mergeSchema=true e enableVectorizedReader=false.
-O green taxi usa lpep_pickup_datetime e lpep_dropoff_datetime em vez de tpep_*. A padronização acontece em ler_e_padronizar() no script de transformação.
-O corte de duração por IQR é recalculado a cada execução da transformação — não há valores hardcoded.
+Reduza spark.sql.shuffle.partitions para 4 nos scripts ou aumente a memória no docker-compose.yml.
+Como rodar um teste específico?
+bashpytest tests/test_transformation.py::TestLimpar::test_registro_valido_e_mantido -v
+Como ver os logs de uma execução do Airflow?
+bashdocker exec ifood_airflow_scheduler find /opt/airflow/logs -name "*.log" -type f
+docker exec ifood_airflow_scheduler cat "/opt/airflow/logs/dag_id=pipeline_ifood/...
