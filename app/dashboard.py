@@ -183,39 +183,40 @@ st.divider()
  
 # ── Bônus 1: Volume por tipo e mês ───────────────────────────────────────────
 st.subheader("Análise Bônus — Volume de corridas e ticket médio por tipo de táxi")
- 
+
 yellow = df_type[df_type["taxi_type"] == "yellow"].sort_values("month")
 green  = df_type[df_type["taxi_type"] == "green"].sort_values("month")
- 
-x = range(5)
+
+# Usa os meses reais do DataFrame em vez de range fixo
+x = range(len(yellow))
+labels = yellow["mes_nome"].tolist()
+
 fig3, axes = plt.subplots(1, 2, figsize=(14, 4))
- 
+
 axes[0].bar([i - 0.2 for i in x], yellow["total_corridas"], width=0.4, label="Yellow", color="#EF9F27")
-axes[0].bar([i + 0.2 for i in x], green["total_corridas"],  width=0.4, label="Green",  color="#1D9E75")
+axes[0].bar([i + 0.2 for i in x], green["total_corridas"].values,  width=0.4, label="Green",  color="#1D9E75")
 axes[0].set_title("Volume de corridas por tipo e mês")
 axes[0].set_xlabel("Mês")
 axes[0].set_ylabel("Total de corridas")
 axes[0].set_xticks(list(x))
-axes[0].set_xticklabels([MESES[i+1] for i in x])
+axes[0].set_xticklabels(labels)
 axes[0].yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{v/1e6:.1f}M"))
 axes[0].legend()
 axes[0].grid(axis="y", linestyle="--", alpha=0.3)
- 
-axes[1].plot(list(x), yellow["avg_total_amount"], marker="o", color="#EF9F27", label="Yellow", linewidth=2)
-axes[1].plot(list(x), green["avg_total_amount"],  marker="o", color="#1D9E75", label="Green",  linewidth=2)
+
+axes[1].plot(list(x), yellow["avg_total_amount"].values, marker="o", color="#EF9F27", label="Yellow", linewidth=2)
+axes[1].plot(list(x), green["avg_total_amount"].values,  marker="o", color="#1D9E75", label="Green",  linewidth=2)
 axes[1].set_title("Ticket médio por tipo e mês")
 axes[1].set_xlabel("Mês")
 axes[1].set_ylabel("Média (USD)")
 axes[1].set_xticks(list(x))
-axes[1].set_xticklabels([MESES[i+1] for i in x])
+axes[1].set_xticklabels(labels)
 axes[1].yaxis.set_major_formatter(mticker.FormatStrFormatter("U$ %.0f"))
 axes[1].legend()
 axes[1].grid(axis="y", linestyle="--", alpha=0.3)
- 
+
 plt.tight_layout()
 st.pyplot(fig3)
- 
-st.divider()
  
  
 # ── Bônus 2: Horários de pico ─────────────────────────────────────────────────
